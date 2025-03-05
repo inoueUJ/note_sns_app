@@ -43,6 +43,7 @@ export const signInAction = async (formData: FormData) => {
   const password = formData.get('password') as string
   const supabase = await createClient()
 
+  // サインイン
   const { error } = await supabase.auth.signInWithPassword({
     email,
     password,
@@ -52,7 +53,29 @@ export const signInAction = async (formData: FormData) => {
     return encodedRedirect('error', '/sign-in', error.message)
   }
 
-  return redirect('/protected')
+  // ユーザー情報を取得
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return encodedRedirect('error', '/sign-in', '認証に失敗しました')
+  }
+
+  // プロフィールの存在チェック
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .single()
+
+  // プロフィールが存在しない場合はオンボーディングへ
+  if (!profile) {
+    return redirect('/onboarding')
+  }
+
+  // プロフィールが存在する場合はnotesへ
+  return redirect('/notes')
 }
 
 export const forgotPasswordAction = async (formData: FormData) => {
@@ -66,7 +89,7 @@ export const forgotPasswordAction = async (formData: FormData) => {
   }
 
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${origin}/auth/callback?redirect_to=/protected/reset-password`,
+    redirectTo: `${origin}/auth/callback?redirect_to=/profile/reset-password`, // パス修正
   })
 
   if (error) {
@@ -96,17 +119,17 @@ export const resetPasswordAction = async (formData: FormData) => {
   const confirmPassword = formData.get('confirmPassword') as string
 
   if (!(password && confirmPassword)) {
-    encodedRedirect(
+    return encodedRedirect(
       'error',
-      '/protected/reset-password',
+      '/profile/reset-password',
       'Password and confirm password are required',
     )
   }
 
   if (password !== confirmPassword) {
-    encodedRedirect(
+    return encodedRedirect(
       'error',
-      '/protected/reset-password',
+      '/profile/reset-password',
       'Passwords do not match',
     )
   }
@@ -116,14 +139,18 @@ export const resetPasswordAction = async (formData: FormData) => {
   })
 
   if (error) {
-    encodedRedirect(
+    return encodedRedirect(
       'error',
-      '/protected/reset-password',
+      '/profile/reset-password',
       'Password update failed',
     )
   }
 
-  encodedRedirect('success', '/protected/reset-password', 'Password updated')
+  return encodedRedirect(
+    'success',
+    '/profile/reset-password',
+    'Password updated',
+  )
 }
 
 export const signOutAction = async () => {
